@@ -1,0 +1,5 @@
+#!/bin/sh
+sv check udevd
+
+device=/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd
+exec /usr/local/bin/evmap $device >/dev/null
