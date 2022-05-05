@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     perror("device");
     exit(1);
   }
-  printf("Input device name: %s\n", libevdev_get_name(in));
+  fprintf(stderr, "Input device name: %s\n", libevdev_get_name(in));
 
   if (libevdev_grab(in, LIBEVDEV_GRAB) < 0)
   {
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
   while (1)
   {
     struct input_event ev;
-    int ok = libevdev_next_event(in, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+    int ok = libevdev_next_event(in, LIBEVDEV_READ_FLAG_NORMAL|LIBEVDEV_READ_FLAG_BLOCKING, &ev);
     if (ok == LIBEVDEV_READ_STATUS_SUCCESS)
     {
       // printf("event: %s %s\n",
