@@ -1,0 +1,4 @@
+type       = process
+command    = /usr/local/bin/evmap /dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd
+logfile    = /var/log/dinit/evmap.log
+depends-on = udev-settle
