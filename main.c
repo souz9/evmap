@@ -6,47 +6,81 @@
 #include <libevdev/libevdev.h>
 #include <libevdev/libevdev-uinput.h>
 
-#define MAX_KEY_CODES 1024
-static bool pressed_keys[MAX_KEY_CODES];
+#define MAX_KEY_CODES 256
+static int rcvd_keys[MAX_KEY_CODES];
+static int sent_keys[MAX_KEY_CODES];
+static bool need_sync;
 
-void remap_key(const struct libevdev_uinput *out, int code, int value, int clear_code)
-{
-  if (value == 1)
-    libevdev_uinput_write_event(out, EV_KEY, clear_code, 0);
-
+void send_key(const struct libevdev_uinput *out, int code, int value) {
   libevdev_uinput_write_event(out, EV_KEY, code, value);
+  sent_keys[code] = value;
 
-  if (value == 0)
-    libevdev_uinput_write_event(out, EV_KEY, clear_code, 1);
+  // fprintf(stderr, "\ncode=%d value=%d meta=%d left=%d home=%d",
+  //   code, value,  sent_keys[KEY_LEFTMETA], sent_keys[KEY_LEFT], sent_keys[KEY_HOME]);
 }
+
+void sync_key(const struct libevdev_uinput *out, int code, int value) {
+  if (sent_keys[code] == 0 && value != 0)
+    send_key(out, code, 1);
+  if (sent_keys[code] != 0 && value == 0)
+    send_key(out, code, 0);
+}
+
+void sync_keys(const struct libevdev_uinput *out)
+{
+  for (int i = 0; i < MAX_KEY_CODES; i++)
+    sync_key(out, i, rcvd_keys[i]);
+}
+
+bool test_key(struct input_event ev, int code, int mod)
+{
+  return (ev.code == code || rcvd_keys[code] != 0)
+      && (ev.code == mod  || rcvd_keys[mod] != 0);
+}
+
+bool remap_key(const struct libevdev_uinput *out, struct input_event ev, int code, int mod, int new_code)
+{
+  if (!test_key(ev, code, mod))
+    return false;
+
+  if (ev.value != 0) {
+    sync_key(out, code, 0);
+    sync_key(out, mod, 0);
+    need_sync = true;
+  }
+  if (ev.code != code && ev.code != mod) {
+    sync_key(out, ev.code, ev.value);
+  }
+
+  send_key(out, new_code, ev.value);
+  return true;
+}
+
+bool default_key_handler(const struct libevdev_uinput *out, struct input_event ev)
+{
+  if (need_sync) {
+    need_sync = false;
+    sync_keys(out);
+  }
+  send_key(out, ev.code, ev.value);
+  return true;
+}
+
+static bool _;
 
 void handle_event(struct input_event ev, const struct libevdev_uinput *out)
 {
-  if (ev.type == EV_KEY && ev.code < MAX_KEY_CODES)
-  {
-    pressed_keys[ev.code] = ev.value != 0;
+  if (ev.type != EV_KEY) {
+    libevdev_uinput_write_event(out, ev.type, ev.code, ev.value);
+    return;
   }
 
-  if (ev.type == EV_KEY && ev.code == KEY_LEFT && pressed_keys[KEY_LEFTMETA])
-  {
-    remap_key(out, KEY_HOME, ev.value, KEY_LEFTMETA);
-  }
-  else if (ev.type == EV_KEY && ev.code == KEY_RIGHT && pressed_keys[KEY_LEFTMETA])
-  {
-    remap_key(out, KEY_END, ev.value, KEY_LEFTMETA);
-  }
-  else if (ev.type == EV_KEY && ev.code == KEY_UP && pressed_keys[KEY_LEFTMETA])
-  {
-    remap_key(out, KEY_PAGEUP, ev.value, KEY_LEFTMETA);
-  }
-  else if (ev.type == EV_KEY && ev.code == KEY_DOWN && pressed_keys[KEY_LEFTMETA])
-  {
-    remap_key(out, KEY_PAGEDOWN, ev.value, KEY_LEFTMETA);
-  }
-  else
-  {
-    libevdev_uinput_write_event(out, ev.type, ev.code, ev.value);
-  }
+  _ = remap_key(out, ev, KEY_LEFT,  KEY_LEFTMETA, KEY_HOME    )
+   || remap_key(out, ev, KEY_RIGHT, KEY_LEFTMETA, KEY_END     )
+   || remap_key(out, ev, KEY_UP,    KEY_LEFTMETA, KEY_PAGEUP  )
+   || remap_key(out, ev, KEY_DOWN,  KEY_LEFTMETA, KEY_PAGEDOWN)
+   || default_key_handler(out, ev);
+  rcvd_keys[ev.code] = ev.value;
 }
 
 int main(int argc, char **argv)
