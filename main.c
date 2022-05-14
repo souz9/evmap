@@ -11,11 +11,11 @@ static int rcvd_keys[MAX_KEY_CODES];
 static int sent_keys[MAX_KEY_CODES];
 
 void send_key(const struct libevdev_uinput *out, int code, int value) {
+  if (sent_keys[code] == 0 && value == 2)
+    value = 1;
+
   libevdev_uinput_write_event(out, EV_KEY, code, value);
   sent_keys[code] = value;
-
-  // fprintf(stderr, "\ncode=%d value=%d meta=%d left=%d home=%d",
-  //   code, value,  sent_keys[KEY_LEFTMETA], sent_keys[KEY_LEFT], sent_keys[KEY_HOME]);
 }
 
 void sync_key(const struct libevdev_uinput *out, int code, int value) {
@@ -23,12 +23,6 @@ void sync_key(const struct libevdev_uinput *out, int code, int value) {
     send_key(out, code, 1);
   if (sent_keys[code] != 0 && value == 0)
     send_key(out, code, 0);
-}
-
-void sync_keys(const struct libevdev_uinput *out)
-{
-  for (int i = 0; i < MAX_KEY_CODES; i++)
-    sync_key(out, i, rcvd_keys[i]);
 }
 
 bool remap_key(const struct libevdev_uinput *out, struct input_event ev, int code, int mod, int new_code)
@@ -41,7 +35,9 @@ bool remap_key(const struct libevdev_uinput *out, struct input_event ev, int cod
       sync_key(out, mod, 0);
     }
 
-    send_key(out, new_code, ev.value);
+    if (ev.code != code && ev.value == 1);
+    else
+      send_key(out, new_code, ev.value);
 
     if (ev.value == 0) {
       sync_key(out, mod, rcvd_keys[mod]);
